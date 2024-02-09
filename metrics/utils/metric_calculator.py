@@ -106,9 +106,6 @@ class MetricCalculator(TestSuiteEvaluator):
             exact_score = self.eval_exact_match(p_sql, g_sql, partial_scores)
             if exact_score == 0:
                 turn_scores["exact"].append(0)
-                print("{} pred: {}".format(hardness, predicted))
-                print("{} gold: {}".format(hardness, gold))
-                print("")
             else:
                 turn_scores["exact"].append(1)
             self.scores[turn_id]["exact"] += exact_score

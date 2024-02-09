@@ -70,7 +70,7 @@ class DatasetEvaluationInfo(DatasetInfo):
                                                      metrics=dataset[row["index"]]["metrics"]
                                                      )
             except Exception as e:
-                print("hi")
+                pass
 
         print(f"# Errors from parsing.................................................")
         print(", ".join([f"{model}: {num}" for model, num in self._ignored_predictions_per_model.items()]))
