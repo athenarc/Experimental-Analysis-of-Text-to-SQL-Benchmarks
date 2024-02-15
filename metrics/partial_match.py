@@ -192,10 +192,6 @@ class StructuralMatch(ComponentsMatch):
             # Append the orders in the order by in the element
             elements[elements.index("orderby")] = f"orderby_{'_'.join(query.orderByClause.orders())}"
 
-        # # Remove nestings
-        # while "nesting" in elements:
-        #     elements.remove("nesting")
-
         # If the query is a set operator
         if query.setOperator is not None:
             set_operator_queries = query.setOperator.queries

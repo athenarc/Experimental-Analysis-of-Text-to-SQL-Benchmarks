@@ -415,8 +415,7 @@ class WhereClause(Clause):
         # Remove the last entry which has 0 conditions
         conditions = conditions[:-1]
 
-        # Return the number of al conditions
-
+        # Return the number of all conditions
         return sum([len(subconds) for subconds in conditions])
 
 

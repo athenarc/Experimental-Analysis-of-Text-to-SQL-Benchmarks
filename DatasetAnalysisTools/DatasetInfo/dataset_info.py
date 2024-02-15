@@ -14,7 +14,7 @@ from DatasetAnalysisTools.DatabaseInfo.database_info import DatabaseInfo
 from DatasetAnalysisTools.QuestionInfo.question_info import QuestionInfo
 from exceptions import SQLParserException
 
-# TODO get them from queryinfo?
+
 CLAUSES = [SelectClause, FromClause, WhereClause, GroupByClause, HavingClause, OrderByClause, LimitClause]
 
 OPERATOR_TYPES = [Join, Aggregate, ComparisonOperator, LogicalOperator, LikeOperator, ArithmeticOperator,
@@ -136,7 +136,7 @@ class DatasetInfo:
     def _initialize_queries_info_dict(self, store_sql_queries_info: bool = False) -> dict:
         """
         Defines the columns of the stored information regarding the sql and the natural language queries.
-            store_sql_queries_info (bool): If True the returned dictionary will addionally have the
+            store_sql_queries_info (bool): If True the returned dictionary will additionally have the
                 'sql_query_info' key.
 
         Return (dict): Dictionary with keys: names of info to be stored, values: empty lists
@@ -226,7 +226,6 @@ class DatasetInfo:
                 sql_query_info.get_operatorTypes_category(return_format="counter"))
             self._queries_info_dict["sql_query_depth"].append(sql_query_info.depth())
 
-            # TODO in case of set operator?
             self._queries_info_dict["select_columns"].append(sql_query_info.selectClause.columns_num()
                                                              if sql_query_info.selectClause is not None else None)
             self._queries_info_dict["where_conditions"].append(sql_query_info.whereClause.conditions_num()
