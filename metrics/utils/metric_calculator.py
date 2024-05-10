@@ -1,5 +1,3 @@
-# code based on https://github.com/taoyds/test-suite-sql-eval/
-
 from DatasetAnalysisTools.DatabaseInfo.database_info import DatabaseInfo
 from third_party.test_suite.evaluation import PARTIAL_TYPES
 from third_party.test_suite.evaluation import Evaluator as TestSuiteEvaluator
@@ -22,13 +20,14 @@ class MetricCalculator(TestSuiteEvaluator):
             None, {}, etype, plug_value, keep_distinct, progress_bar_for_each_datapoint
         )
 
-    def evaluate_one(self, db_path, gold, predicted, turn_scores={"exec": [], "exact": []}, idx=0):
+    def evaluate_one(self, db_name, db_path, gold, predicted, turn_scores={"exec": [], "exact": []}, idx=0):
         # CHANGE FROM TEST SUITE OFFICIAL EVALUATOR.....................................................................
         if db_path not in self.db_paths:
             self.db_paths[db_path] = db_path
-            self.schemas[db_path] = TestSuiteSchema(get_schema(db_path))
 
             db_info = DatabaseInfo(db_path)
+
+            self.schemas[db_path] = TestSuiteSchema(db_info.get_columns_per_table(lowercase=True))
 
             self.kmaps[db_path] = build_foreign_key_map(
                 {
@@ -50,26 +49,30 @@ class MetricCalculator(TestSuiteEvaluator):
 
         if self.etype in ["all", "match"]:
             schema = self.schemas[db_path]
-            g_sql = get_sql(schema, gold)
+            try:
+                g_sql = get_sql(schema, gold)
+            except Exception as e:
+                raise SyntaxError(f"gold: {e}")
             hardness = self.eval_hardness(g_sql)
             self.scores[hardness]["count"] += 1
 
             try:
                 p_sql = get_sql(schema, predicted)
-            except:
+            except Exception as e:
+                raise SyntaxError(f"predicted: {e}")
                 # If p_sql is not valid, then we will use an empty sql to evaluate with the correct sql
-                p_sql = {
-                    "except": None,
-                    "from": {"conds": [], "table_units": []},
-                    "groupBy": [],
-                    "having": [],
-                    "intersect": None,
-                    "limit": None,
-                    "orderBy": [],
-                    "select": [False, []],
-                    "union": None,
-                    "where": [],
-                }
+                # p_sql = {
+                #     "except": None,
+                #     "from": {"conds": [], "table_units": []},
+                #     "groupBy": [],
+                #     "having": [],
+                #     "intersect": None,
+                #     "limit": None,
+                #     "orderBy": [],
+                #     "select": [False, []],
+                #     "union": None,
+                #     "where": [],
+                # }
 
         if self.etype in ["all", "exec"]:
             exec_score = eval_exec_match(

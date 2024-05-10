@@ -1,15 +1,12 @@
+from typing import Union
+
 from tqdm import tqdm
 import pandas as pd
 import json
 
 from DatasetAnalysisTools.DatasetInfo.dataset_info import DatasetInfo
 
-
 PREDICTION_PARSING_ERRORS_OUTPUT_FILE = "storage/prediction_parsing_errors.json"
-
-
-def timeout_handler(signum, frame):
-    raise TimeoutError()
 
 
 class DatasetEvaluationInfo(DatasetInfo):
@@ -41,10 +38,7 @@ class DatasetEvaluationInfo(DatasetInfo):
         !!! All datapoints must use the same models and have results in the same metrics.
         """
 
-        super().__init__(datasetName, dataset, store_sql_queries_info=True)
-
-        # Get all the available metrics of PartialMatch
-        # self._partial_match_metrics = PartialMatch.reported_values()
+        super().__init__(datasetName, dataset, store_sql_queries_info=True, ignore_info=["questions"])
 
         # Initialize the evaluated models
         self.models = models
@@ -164,3 +158,20 @@ class DatasetEvaluationInfo(DatasetInfo):
     def parsingErrors(self):
         return pd.DataFrame(data={"Model": self._ignored_predictions_per_model.keys(),
                                   "# Errors": self._ignored_predictions_per_model.values()})
+
+    def models_differences(self, metric: str) -> pd.DataFrame:
+        """Returns a dataframe with the sql_queries for which the models had correct and wrong predictions."""
+
+        differences = {"sql_query": [], "correct_models": [], "predictions": []}
+
+        predictions_per_datapoint = self.evaluationDf.groupby(["index"])
+
+        for index, predictions in predictions_per_datapoint:
+            metric_predictions = predictions[predictions["metric name"] == metric]
+            if metric_predictions["metric value"].nunique() > 1:
+                differences["sql_query"].append(self.queries_info_df[(self.queries_info_df["index"] == index) &
+                                                                     (self.queries_info_df["current_depth"] == -1)]["sql_query"].values[0])
+                differences["correct_models"].append(metric_predictions[metric_predictions["metric value"] == 1]["model"].values.tolist())
+                differences["predictions"].append({row["model"]: row["prediction"] for _, row in metric_predictions.iterrows()})
+
+        return pd.DataFrame(differences)

@@ -5,6 +5,7 @@ import mo_parsing
 import pandas as pd
 from datasets import Features, Value
 from evaluate import EvaluationModule, EvaluationModuleInfo
+from tqdm import tqdm
 
 from DatasetAnalysisTools.QueryInfo.query_extractor.mo_sql_parser_extractor import MoQueryExtractor
 from DatasetAnalysisTools.QueryInfo.query_info import QueryInfo, get_subqueries_per_depth, CLAUSES, VARIABLE_TYPES, \
@@ -176,7 +177,7 @@ class StructuralMatch(ComponentsMatch):
 
     @classmethod
     def name(cls):
-        return "structural_match"
+        return "SM"
 
     def _get_component_instances(self, component: str, elements: list[str]) -> list[str]:
         if component == "set_operator":
@@ -216,7 +217,7 @@ class OperatorsMatch(ComponentsMatch):
 
     @classmethod
     def name(cls):
-        return "operators_match"
+        return "OM"
 
     def _get_component_instances(self, component: str, elements: list[str]) -> list[str]:
         return [e for e in elements if e.startswith(component)]
@@ -245,7 +246,7 @@ class VariablesMatch(ComponentsMatch):
 
     @classmethod
     def name(cls):
-        return "variables_match"
+        return "VM"
 
     def _get_component_instances(self, component: str, elements: list[str]) -> list[str]:
         return [e for e in elements if e.startswith(component + "/")]
@@ -314,7 +315,7 @@ class PartialMatch:
 
     @classmethod
     def name(cls):
-        return "partial_match"
+        return "PM"
 
     @classmethod
     def components(cls):
@@ -381,7 +382,7 @@ class PartialMatchMetric(EvaluationModule):
         original_sigalrm_handler = signal.getsignal(signal.SIGALRM)
         signal.signal(signal.SIGALRM, handler=timeout_handler)
 
-        for prediction, reference in zip(predictions, references):
+        for prediction, reference in tqdm(zip(predictions, references), desc="Calculating partial match..."):
             try:
                 signal.alarm(10)
                 # Parse the predicted and the referenced query
@@ -419,3 +420,37 @@ class PartialMatchMetric(EvaluationModule):
             return evaluation_results.to_dict(orient="records")
         else:
             return {metric: avg for metric, avg in evaluation_results.mean().items()}
+
+
+class PartialMatchBooleanMetric(EvaluationModule):
+
+    def __init__(self):
+        super().__init__()
+        self.partialMatchMetric = PartialMatchMetric()
+
+    def _info(self) -> EvaluationModuleInfo:
+        return EvaluationModuleInfo(description="Partial Match Boolean",
+                                    citation="",
+                                    features=Features(
+                                        {
+                                            "predictions": Value("string", id="sequence"),
+                                            "references": {
+                                                "sql_query": Value("string", id="sequence"),
+                                                "db_id": Value("string", id="sequence"),
+                                                "db_path": Value("string", id="sequence"),
+                                            }
+                                        }
+                                    ),
+                                    module_name="partial_match_boolean")
+
+    def _compute(self, predictions=None, references=None, **kwargs):
+        kwargs["boolean"] = True
+        partial_match_boolean = self.partialMatchMetric.compute(predictions=predictions, references=references,
+                                                                **kwargs)
+
+        if type(partial_match_boolean) is dict:
+            return {k + "_boolean": v for k, v in partial_match_boolean.items()}
+        else:
+            for i, result in enumerate(partial_match_boolean):
+                partial_match_boolean[i] = {k + "_boolean": v for k, v in result.items()}
+            return partial_match_boolean

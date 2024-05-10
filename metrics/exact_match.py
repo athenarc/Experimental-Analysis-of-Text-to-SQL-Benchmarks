@@ -1,17 +1,19 @@
-"""Test-suite exact match metric."""
+"""Spider exact match metric."""
 from datasets import Features, Value
 from evaluate import EvaluationModule, EvaluationModuleInfo
+from loguru import logger
+from tqdm import tqdm
 
-from DatasetAnalysisTools.DatabaseInfo.database_info import DatabaseInfo
-from third_party.test_suite import evaluation as spider_evaluation
+from metrics.utils import metric_calculator as spider_evaluation
+from metrics.utils.normalize_for_exact_match_parsing import normalize_for_exact_match_parsing
 
 
 def evaluation_in_exact_match_failure():
     return {
-                "hardness": "NA",
-                "exact": 0,
-                "partial":  "NA"
-            }
+        "hardness": "NA",
+        "exact": 0,
+        "partial": "NA"
+    }
 
 
 class SpiderExactMatchMetric(EvaluationModule):
@@ -31,50 +33,43 @@ class SpiderExactMatchMetric(EvaluationModule):
                                     ),
                                     module_name="spider_exact_match")
 
-    def _compute(self, predictions=None, references=None, **kwargs):
+    def _compute(self, predictions=None, references=None, return_errors: bool = False, **kwargs):
 
-        foreign_key_maps = dict()
-        dbs_info = {}
-        for reference in references:
-            if reference['db_path'] is not None:
-                dbs_info[reference["db_id"]] = DatabaseInfo(reference['db_path']).schema_as_dict()
-            else:
-                raise Exception("No database info are provided!")
+        evaluator = spider_evaluation.MetricCalculator(
+            etype="match",
+            plug_value=False,
+            keep_distinct=True,
+            progress_bar_for_each_datapoint=False,
+        )
 
-        # Create foreign-primary key mapping
-        for db_id, db_info in dbs_info.items():
-            if db_id not in foreign_key_maps:
-                foreign_key_maps[db_id] = spider_evaluation.build_foreign_key_map(
-                    {
-                        "table_names_original": db_info["table_names"],
-                        "column_names_original": db_info["column_names"],
-                        "foreign_keys": db_info["foreign_primary_keys"],
-                    }
-                )
+        parsing_errors = []
 
-        # Calculate exact match with the evaluator of spider
-        evaluator = spider_evaluation.Evaluator(db_dir="",
-                                                kmaps=foreign_key_maps,
-                                                etype="match",
-                                                plug_value=True,
-                                                keep_distinct=True,
-                                                progress_bar_for_each_datapoint=False)
         evaluation_per_pair = []
-        for prediction, reference in zip(predictions, references):
+        for prediction, reference in tqdm(zip(predictions, references), desc="Calculating exact match..."):
             try:
                 evaluation = evaluator.evaluate_one(db_name=reference["db_id"],
-                                                    gold=reference["sql_query"],
-                                                    predicted=prediction,
+                                                    gold=normalize_for_exact_match_parsing(reference["sql_query"]),
+                                                    predicted=normalize_for_exact_match_parsing(prediction),
                                                     db_path=reference["db_path"],
                                                     turn_scores={"exec": [], "exact": []},
                                                     idx=0)
             except Exception as e:  # If there is a problem during parsing
+                if len(prediction):
+                    parsing_errors.append({"query": reference["sql_query"], "prediction": prediction,
+                                          "db_path": reference["db_path"], "error": str(e)})
                 evaluation = evaluation_in_exact_match_failure()
+
             evaluation_per_pair.append({k: v for k, v in evaluation.items() if k in ("hardness", "exact", "partial")})
 
-        evaluator.finalize()
+        if len(parsing_errors):
+            logger.warning(f"There were {len(parsing_errors)} pairs with syntax errors! The exact match was set to 0 "
+                           f"in these pairs")
 
         if "not_aggregated" in kwargs and kwargs["not_aggregated"]:
-            return evaluation_per_pair
+            if return_errors:
+                return {"results": evaluation_per_pair, "errors": parsing_errors}
+            else:
+                return evaluation_per_pair
         else:
-            return {"exact": evaluator.scores["all"]["exact"]}
+            return {
+                "exact": sum([evaluation["exact"] for evaluation in evaluation_per_pair]) / len(evaluation_per_pair)}

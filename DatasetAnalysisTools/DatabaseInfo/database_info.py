@@ -1,7 +1,9 @@
-import json
-import sqlite3
 from typing import Union
 import enchant
+
+from DatasetAnalysisTools.DatabaseInfo.databases.json_database import JsonDatabase
+from DatasetAnalysisTools.DatabaseInfo.databases.mysql_database import MySQLDatabase
+from DatasetAnalysisTools.DatabaseInfo.databases.sqlite_database import SqliteDatabase
 
 d = enchant.Dict("en")
 
@@ -14,29 +16,26 @@ class DatabaseInfo:
     foreign_primary_keys: list[tuple[str, str]]  # tuple(<foreign_key_column_index>, <primary_key_column_index>)
     table_rows: Union[list[int], None]
 
-    def __init__(self, db_path_or_json: str):
+    def __init__(self, db_path_or_name: str, **kwargs):
         """
         Initializes the information of a database.
         Args:
-            db_path_or_json (str): The path to an .sqlite file or to a .json file containing the tables names, column
-                                   names, column types and the foreign primary key relations of the database.
+            db_path_or_name (str): The path to an .sqlite file, to a .json file, or to a MySQL database containing the
+                                   tables names, column names, column types and the foreign primary key relations of the database.
         """
-        # If a .sqlite file has been given to get the database schema
-        if db_path_or_json.endswith(".sqlite"):
-            (self.table_names, self.column_names,
-             self.column_types, self.foreign_primary_keys, self.table_rows) = self._get_sqlite_schema(db_path_or_json)
-        elif db_path_or_json.endswith(".json"):
-            with open(db_path_or_json, "r") as f:
-                schema_info = json.load(f)
-                self.table_names = schema_info["tables_names_original"] if "tables_names_original" in schema_info \
-                    else schema_info["table_names"]
-                self.column_names = schema_info["column_names_original"] if "column_names_original" in schema_info \
-                    else schema_info["column_names"]
-                self.column_types = schema_info["column_types"]
-                self.foreign_primary_keys = schema_info["foreign_keys"]
-            self.table_rows = None
-        else:
-            raise ValueError
+        try:
+            # If a .sqlite file has been given to get the database schema
+            if db_path_or_name.endswith(".sqlite"):
+                db = SqliteDatabase(db_path_or_name)
+            elif db_path_or_name.endswith(".json"):
+                db = JsonDatabase(db_path_or_name, **kwargs)
+            else:
+                db = MySQLDatabase(db_path_or_name)
+        except Exception as e:
+            raise ValueError(f"Database {db_path_or_name} is not valid!")
+
+        (self.table_names, self.column_names,
+         self.column_types, self.foreign_primary_keys, self.table_rows) = db.get_schema()
 
     def schema_as_dict(self) -> dict:
         return {
@@ -46,58 +45,22 @@ class DatabaseInfo:
             "foreign_primary_keys": self.foreign_primary_keys
         }
 
-    @staticmethod
-    def _get_sqlite_schema(sqlite_path: str) -> tuple:
+    def get_columns_per_table(self, lowercase: bool = False) -> dict:
         """
-        Returns the database schema of a .sqlite file
+        Returns a dictionary with keyw the table names and values the columns of each table.
+
         Args:
-        sqlite_path (str): database path
+            lowercase (bool): If True the names of the columns and tables are lowercased.
 
-        Returns (tuple): Returns a tuple with
-                        'table_names': list[str],
-                        'column_names': list[tuple(<table_index>, <column_name>)],
-                        'column_types': list[str],
-                        'foreign_primary_keys': list[tuple(<foreign_key_column_index, primary_key_column_index>)]}
         """
+        columns_per_table = {}
+        for t_i, table in enumerate(self.table_names):
+            table_columns = list(filter(lambda column: column[0] == t_i, self.column_names))
 
-        conn = sqlite3.connect(sqlite_path)
-        conn.execute('pragma foreign_keys=ON')
+            columns_per_table[table.lower() if lowercase else table] = list(map(
+                lambda column: column[1].lower() if lowercase else column[1], table_columns))
 
-        # Get all the tables
-        table_names = list(
-            map(lambda row: row[0], conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()))
-
-        # Initialize list of columns
-        column_names = [(-1, '*')]
-        column_types = [""]
-
-        foreign_primary_keys_names = []
-        tables_rows = []
-        # For each table
-        for t_i, table_name in enumerate(table_names):
-
-            # Get the foreign keys of the table
-            table_fks_info = conn.execute("PRAGMA foreign_key_list('{}') ".format(table_name)).fetchall()
-            for _, _, pk_table, fk_column, pk_column, _, _, _ in table_fks_info:
-                foreign_primary_keys_names.append(((table_name, fk_column, pk_table, pk_column)))
-
-            # Get the table's columns names and types
-            table_columns_info = list(map(lambda row: (row[1], row[2]),
-                                          conn.execute("PRAGMA table_info('{}') ".format(table_name)).fetchall()))
-            # For every column
-            for column_name, column_type in table_columns_info:
-                column_names.append((t_i, column_name))
-                column_types.append(column_type)
-
-            tables_rows.append(conn.execute(f"select count(*) from {table_name}").fetchall()[0][0])
-
-        # Convert foreign-primary keys names to column indexes
-        foreign_primary_keys = []
-        for fk_table, fk_column, pk_table, pk_column in foreign_primary_keys_names:
-            foreign_primary_keys.append((column_names.index((table_names.index(fk_table), fk_column)),
-                                         column_names.index((table_names.index(pk_table), pk_column))))
-
-        return table_names, column_names, column_types, foreign_primary_keys, tables_rows
+        return columns_per_table
 
     def get_schema_elements(self) -> list[str]:
         """ Returns the database schema as a list with the names of the columns and the tables in the database. """
@@ -132,6 +95,9 @@ class DatabaseInfo:
             return None
         else:
             return sum(self.table_rows) / len(self.table_rows), min(self.table_rows), max(self.table_rows)
+
+    def get_total_rows(self) -> Union[int, None]:
+        return sum(self.table_rows) if self.table_rows is not None else None
 
     def percentages_of_explainable_schema_elements(self) -> float:
         """Returns the percentage of the schema elements that are valid English words."""

@@ -366,7 +366,7 @@ class MembershipOperator(Operator):
 
 
 class NullOperator(Operator):
-    _members = ["is null", "is not null"]
+    _members = ["is null", "is not null", "exists"]
 
     def __init__(self, op: str, operands: tuple[Union[Column, 'QueryInfo', 'SetOperator']]):
         super().__init__(op, operands)
