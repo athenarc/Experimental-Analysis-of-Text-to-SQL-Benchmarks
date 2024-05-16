@@ -1,0 +1,2 @@
+,# sql,# questions,# sql-question,# templates (names),# templates (counter),# databases,depth stats,#operators stats,#joins stats,select columns stats,where conditions stats,question length stats,exact schema references percentage,explainable schema elements stats
+geoquery (test),592,877,920,50,91,1,"(0.58, 0.0, 6.0)","(2.39, 0, 14)","(0.08, 0, 3)","(1.0, 1.0, 2.0)","(1.46, 1.0, 7.0)","(41.17, 15, 111)","(0.0, 0.0, 0.0)","(97.22, 97.22222222222221, 97.22222222222221)"
